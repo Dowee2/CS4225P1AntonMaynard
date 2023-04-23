@@ -2,9 +2,11 @@ package edu.westga.cs4225.Utils;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,31 +21,43 @@ import org.apache.hadoop.conf.Configuration;
 
 public class Utils {
 
-    public static double calculatePageRankDifference(Path prevOutputPath, Path outputPath) throws IOException {
+    public static double calculatePageRankDifference(Path prevOutputPath, Path currentOutputPath) throws IOException {
         Configuration conf = new Configuration();
         FileSystem fs = FileSystem.get(conf);
     
-        BufferedReader prevOutputReader = new BufferedReader(new InputStreamReader(fs.open(new Path(prevOutputPath, "part-r-00000"))));
-        BufferedReader currentOutputReader = new BufferedReader(new InputStreamReader(fs.open(new Path(outputPath, "part-r-00000"))));
+        FileStatus[] prevFileStatus = fs.listStatus(prevOutputPath, path -> path.getName().startsWith("part-r-"));
+        FileStatus[] currentFileStatus = fs.listStatus(currentOutputPath, path -> path.getName().startsWith("part-r-"));
     
-        double totalDifference = 0.0;
-        String prevLine, currentLine;
+        double sumDifference = 0.0;
     
-        while ((prevLine = prevOutputReader.readLine()) != null && (currentLine = currentOutputReader.readLine()) != null) {
-            String[] prevTokens = prevLine.split("\t");
-            String[] currentTokens = currentLine.split("\t");
+        for (int i = 0; i < prevFileStatus.length; i++) {
+            Path prevInputFile = prevFileStatus[i].getPath();
+            Path currentInputFile = currentFileStatus[i].getPath();
     
-            double prevPageRank = Double.parseDouble(prevTokens[1].split(",")[1].split("=")[1]);
-            double currentPageRank = Double.parseDouble(currentTokens[1].split(",")[1].split("=")[1]);
+            try (BufferedReader prevBr = new BufferedReader(new InputStreamReader(fs.open(prevInputFile)));
+                 BufferedReader currentBr = new BufferedReader(new InputStreamReader(fs.open(currentInputFile)))) {
+                String prevLine;
+                String currentLine;
+                while ((prevLine = prevBr.readLine()) != null && (currentLine = currentBr.readLine()) != null) {
+                    String[] prevTokens = prevLine.split("\t");
+                    String[] currentTokens = currentLine.split("\t");
     
-            totalDifference += Math.abs(currentPageRank - prevPageRank);
+                    if (prevTokens.length < 2 || currentTokens.length < 2) {
+                        continue;
+                    }
+    
+                    PageRankData prevPageRankData = fromString(prevTokens[1]);
+                    PageRankData currentPageRankData = fromString(currentTokens[1]);
+    
+                    sumDifference += Math.abs(prevPageRankData.pageRank - currentPageRankData.pageRank);
+                }
+            }
         }
     
-        prevOutputReader.close();
-        currentOutputReader.close();
-    
-        return totalDifference;
+        return sumDifference;
     }
+    
+    
 
     public static double findMaxPageRank(Path outputPath) throws IOException {
         double maxPageRank = 0;
@@ -65,29 +79,98 @@ public class Utils {
             return maxPageRank;
     }
 
-    public static void normalizePageRank(Path inputPath, Path outputPath, double maxPageRank) throws IOException {
-        FileSystem fs = inputPath.getFileSystem(new Configuration());
-        FileStatus[] fileStatus = fs.listStatus(inputPath, path -> path.getName().startsWith("part-r-"));
+    public static void normalizePageRanks(Path inputPath, Path outputPath) throws IOException {
+        Configuration conf = new Configuration();
+        FileSystem fs = FileSystem.get(conf);
     
-        for (FileStatus status : fileStatus) {
-            Path outputFilePath = new Path(outputPath, status.getPath().getName());
-            BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(status.getPath())));
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(fs.create(outputFilePath)));
+        Path inputFile = findInputFile(fs, inputPath);
+        double sumPageRanks = calculateSumOfPageRanks(fs, inputFile);
+    
+        normalizeAndWritePageRanks(fs, inputFile, outputPath, sumPageRanks);
+    }
+    
+    private static Path findInputFile(FileSystem fs, Path inputPath) throws IOException {
+        FileStatus[] fileStatus = fs.listStatus(inputPath, path -> path.getName().startsWith("part-r-"));
+        if (fileStatus.length == 0) {
+            throw new FileNotFoundException("No part-r- file found in the input directory.");
+        }
+        return fileStatus[0].getPath();
+    }
+    
+    private static double calculateSumOfPageRanks(FileSystem fs, Path inputFile) throws IOException {
+        double sumPageRanks = 0.0;
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(inputFile)))) {
             String line;
-            while ((line = reader.readLine()) != null) {
-                String[] tokens = line.split("\\t");
-                if (tokens.length == 2) {
-                    String pageTitle = tokens[0];
-                    PageRankData pageRankData = fromString(tokens[1]);
-                    pageRankData.pageRank /= maxPageRank;
-                    writer.write(pageTitle + "\t" + pageRankData.toString());
-                    writer.newLine();
+            while ((line = br.readLine()) != null) {
+                String[] tokens = line.split("\t");
+                if (tokens.length < 2) {
+                    continue;
                 }
+                PageRankData pageRankData = fromString(tokens[1]);
+                sumPageRanks += pageRankData.pageRank;
             }
-            reader.close();
-            writer.close();
+        }
+        return sumPageRanks;
+    }
+    
+    private static void normalizeAndWritePageRanks(FileSystem fs, Path inputFile, Path outputPath, double sumPageRanks) throws IOException {
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(inputFile)));
+             BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fs.create(new Path(outputPath, "normalized-ranks"))))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] tokens = line.split("\t");
+                if (tokens.length < 2) {
+                    continue;
+                }
+                PageRankData pageRankData = fromString(tokens[1]);
+                pageRankData.pageRank = pageRankData.pageRank / sumPageRanks;
+                bw.write(pageRankData.pageTitle + "\t" + pageRankData.toString());
+                bw.newLine();
+            }
         }
     }
+    
+    
+
+    // public static void normalizePageRanks(Path inputPath, Path outputPath) throws IOException {
+    //     Configuration conf = new Configuration();
+    //     FileSystem fs = FileSystem.get(conf);
+    
+    //     Path inputFile = new Path(inputPath, "part-r-00000");
+    
+    //     // Read input data and calculate the sum of all PageRanks
+    //     double sumPageRanks = 0.0;
+    //     try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(inputFile)))) {
+    //         String line;
+    //         while ((line = br.readLine()) != null) {
+    //             String[] tokens = line.split("\t");
+    //             if (tokens.length < 2) {
+    //                 continue;
+    //             }
+    //             PageRankData pageRankData = fromString(tokens[1]);
+    //             sumPageRanks += pageRankData.pageRank;
+    //         }
+    //     }
+    
+    //     // Normalize PageRanks and write them to the output path
+    //     try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(inputFile)));
+    //          BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fs.create(new Path(outputPath, "normalized-ranks"))))) {
+    //         String line;
+    //         while ((line = br.readLine()) != null) {
+    //             String[] tokens = line.split("\t");
+    //             if (tokens.length < 2) {
+    //                 continue;
+    //             }
+    //             PageRankData pageRankData = fromString(tokens[1]);
+    //             pageRankData.pageRank = pageRankData.pageRank / sumPageRanks;
+    //             bw.write(pageRankData.pageTitle + "\t" + pageRankData.toString());
+    //             bw.newLine();
+    //         }
+    //     }
+    // }
+    
+    
+    
     
     public static PageRankData fromString(String input) {
         PageRankData pageRankData = new PageRankData();
