@@ -1,6 +1,7 @@
 package edu.westga.cs4225;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
@@ -19,60 +20,64 @@ public class PageRankDriver {
             System.err.println("Usage: PageRankDriver <input path> <output path>");
             System.exit(-1);
         }
-    
-        Configuration conf = new Configuration();
-        Path inputPath = new Path(args[0]);
-        Path outputPath = new Path(args[1]);
-        Path tempOutputPath = new Path(outputPath, "temp");
-    
         int maxIterations = 20;
         double convergenceThreshold = 0.0001;
         int iteration = 0;
-    
+        Configuration conf = new Configuration();
+
+        Path outputPath = new Path(args[1]);
+        Path tempOutputPath = new Path(outputPath, "iteration" + iteration);
+        FileSystem fs = FileSystem.get(conf);
+        if (fs.exists(tempOutputPath)) {
+            fs.delete(tempOutputPath, true);
+        }
+
         while (iteration < maxIterations) {
             System.out.println("Iteration: " + iteration);
             conf.setInt("iteration", iteration);
-    
+
             Path currentInputPath;
             if (iteration == 0) {
                 currentInputPath = new Path(args[0]);
             } else {
-                currentInputPath = new Path(outputPath, "iteration" + (iteration - 1));
+                currentInputPath = new Path(outputPath, "iteration" + (iteration - 1) + "/normalized-ranks");
             }
-            Path currentOutputPath = new Path(outputPath, "iteration" + iteration);
-            tempOutputPath = new Path(outputPath, "iteration" + iteration); // Update tempOutputPath for each iteration
             System.out.println("Current input path: " + currentInputPath);
-            System.out.println("Current temp output path: " + tempOutputPath);
-    
+            System.out.println("Current output path: " + tempOutputPath);
+            tempOutputPath = new Path(outputPath, "iteration" + iteration + "/normalized-ranks");
+
             Job job = Job.getInstance(conf, "PageRank");
             job.setJarByClass(PageRankDriver.class);
             job.setMapperClass(PageRankMapper.class);
             job.setReducerClass(PageRankReducer.class);
-    
+
             job.setOutputKeyClass(Text.class);
             job.setOutputValueClass(PageRankData.class);
-    
+
             job.setInputFormatClass(TextInputFormat.class);
-    
+
             FileInputFormat.addInputPath(job, currentInputPath);
             FileOutputFormat.setOutputPath(job, tempOutputPath);
-    
+            
             if (!job.waitForCompletion(true)) {
                 System.exit(1);
             }
-    
+
+            // Normalize PageRanks after each iteration
+            Utils.normalizePageRanks(tempOutputPath, tempOutputPath);
+
             if (iteration > 0) {
-                double difference = Utils.calculatePageRankDifference(currentInputPath, tempOutputPath);
+                Path prevInputPath = new Path(outputPath, "iteration" + (iteration - 1) + "/normalized-ranks");
+                double difference = Utils.calculatePageRankDifference(prevInputPath, tempOutputPath);
                 if (difference < convergenceThreshold) {
                     break;
                 }
             }
             iteration++;
         }
-    
-        // Normalize PageRank values so the maximum PageRank is 1
-        //double maxPageRank = Utils.findMaxPageRank(tempOutputPath);
-        Path normalizedOutputPath = new Path(outputPath, "normalized");
-        Utils.normalizePageRanks(tempOutputPath, normalizedOutputPath);
-    }        
+
+        Path finalOutputPath = new Path(outputPath, "final");
+        FileSystem.get(conf).rename(new Path(tempOutputPath, "normalized-ranks"), finalOutputPath);
+    }
+
 }

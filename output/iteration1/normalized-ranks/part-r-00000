@@ -1,0 +1,6 @@
+A	PageRankData{pageTitle='A', pageRank=1.85, outLinks=[B, C, D]}
+B	PageRankData{pageTitle='B', pageRank=2.4166666666666665, outLinks=[C, E]}
+C	PageRankData{pageTitle='C', pageRank=4.116666666666667, outLinks=[D, E, F]}
+D	PageRankData{pageTitle='D', pageRank=2.9833333333333334, outLinks=[F]}
+E	PageRankData{pageTitle='E', pageRank=3.266666666666666, outLinks=[C, F]}
+F	PageRankData{pageTitle='', pageRank=3.266666666666666, outLinks=[]}
