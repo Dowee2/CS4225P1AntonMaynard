@@ -1,32 +1,46 @@
 package edu.westga.cs4225.PageRank;
 
+import java.io.IOException;
+import java.util.ArrayList;
+
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Reducer;
 
-import java.io.IOException;
-
 public class PageRankReducer extends Reducer<Text, PageRankData, Text, PageRankData> {
-    private double dampingFactor = 0.85;
 
+    private static final double DAMPING_FACTOR = 0.85;
 
-    public void reduce(Text key, Iterable<PageRankData> values, Context context) throws IOException, InterruptedException {
-        double sumPageRanks = 0.0;
-        PageRankData finalPageRankData = null;
-        //finalPageRankData.pageTitle = key.toString(); // Initialize with the current key
-        // finalPageRankData.outLinks = new String[]{};
+    @Override
+    protected void reduce(Text key, Iterable<PageRankData> values, Context context)
+            throws IOException, InterruptedException {
 
+        ArrayList<String> inLinks = new ArrayList<String>();
+        PageRankData pageRankData = new PageRankData();
         for (PageRankData value : values) {
-            sumPageRanks += value.pageRank;
-            if (finalPageRankData == null || finalPageRankData.outLinks.length == 0) {
-                finalPageRankData = new PageRankData(value.pageTitle, value.pageRank, value.outLinks);
+            if (value.inLinks != null && value.inLinks.size() > 0) {
+                inLinks.addAll(value.inLinks);
+            }
+            if (value.pageRank > pageRankData.pageRank) {
+                pageRankData.pageRank = value.pageRank;
+                pageRankData.outLinks = value.outLinks;
             }
         }
 
-        finalPageRankData.pageRank = (1 - dampingFactor) + dampingFactor * sumPageRanks;
+        double newPageRank = 0.0;
+        for (String inLink : inLinks) {
+            double outLinkCount = pageRankData.outLinks.size();
+            newPageRank += DAMPING_FACTOR * (pageRankData.pageRank / outLinkCount);
+        }
+        newPageRank += (1 - DAMPING_FACTOR);
 
-        System.out.println("Reducer output key: " + key);
-        System.out.println("Reducer output value: " + finalPageRankData);
-        context.write(key, finalPageRankData);
+        pageRankData.pageRank = newPageRank;
+        pageRankData.inLinks = inLinks;
+
+        context.write(key, pageRankData);
+        System.out.println("Key: " + key);
+        System.out.println("PageRankData: " + pageRankData);
+        System.out.println("In-Links: " + inLinks);
+        System.out.println("Out-Links: " + pageRankData.outLinks);
     }
 }
 

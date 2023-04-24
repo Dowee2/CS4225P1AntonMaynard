@@ -1,57 +1,70 @@
 package edu.westga.cs4225.PageRank;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+
 import org.apache.hadoop.io.Writable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Arrays;
 
 public class PageRankData implements Writable {
     public String pageTitle;
     public double pageRank;
-    public String[] outLinks;
+    public ArrayList<String> adjacencyList;
+    public double newPageRank;
 
-    public PageRankData(String pageTitle, double pageRank, String[] outLinks) {
+    public PageRankData(String pageTitle, double pageRank, ArrayList<String> adjacencyList, double newPageRank) {
         this.pageTitle = pageTitle;
         this.pageRank = pageRank;
-        this.outLinks = outLinks;
+        this.adjacencyList = adjacencyList;
+        this.newPageRank = newPageRank;
+    }
+
+    public PageRankData(String pageTitle, double pageRank, ArrayList<String> adjacencyList) {
+        this.pageTitle = pageTitle;
+        this.pageRank = pageRank;
+        this.adjacencyList = adjacencyList;
     }
 
     public PageRankData() {
         this.pageTitle = "";
         this.pageRank = 0.0;
-        this.outLinks = new String[] {};
+        this.adjacencyList = new ArrayList<String>();
+        this.newPageRank = 0.0;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeUTF(pageTitle);
         out.writeDouble(pageRank);
-        out.writeInt(outLinks.length);
-        for (String link : outLinks) {
+        out.writeInt(adjacencyList.size());
+        for (String link : adjacencyList) {
             out.writeUTF(link);
         }
+        out.writeDouble(newPageRank);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
         pageTitle = in.readUTF();
         pageRank = in.readDouble();
-        int numLinks = in.readInt();
-        outLinks = new String[numLinks];
-        for (int i = 0; i < numLinks; i++) {
-            outLinks[i] = in.readUTF();
+        int numAdjacencyList = in.readInt();
+        adjacencyList = new ArrayList<String>();
+        for (int i = 0; i < numAdjacencyList; i++) {
+            adjacencyList.add(in.readUTF());
         }
+        newPageRank = in.readDouble();
     }
-    
+
     @Override
     public String toString() {
         return "PageRankData{" +
                 "pageTitle='" + pageTitle + '\'' +
                 ", pageRank=" + pageRank +
-                ", outLinks=" + Arrays.toString(outLinks) +
+                ", adjacencyList=" + Arrays.toString(adjacencyList.toArray()) +
+                ", newPageRank=" + newPageRank +
                 '}';
     }
-
 }

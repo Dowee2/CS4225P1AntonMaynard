@@ -16,7 +16,7 @@
             "request": "launch",
             "mainClass": "edu.westga.cs4225.PageRankDriver",
             "projectName": "CS4225P1AntonMaynard_70d37be4",
-            "args": "toy.txt output"
+            "args": "scowiki-20090929-one-page-per-line output"
         }
     ]
 }

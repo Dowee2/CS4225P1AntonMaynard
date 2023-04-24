@@ -20,6 +20,7 @@ public class PageRankDriver {
             System.err.println("Usage: PageRankDriver <input path> <output path>");
             System.exit(-1);
         }
+
         int maxIterations = 20;
         double convergenceThreshold = 0.0001;
         int iteration = 0;
@@ -58,7 +59,7 @@ public class PageRankDriver {
 
             FileInputFormat.addInputPath(job, currentInputPath);
             FileOutputFormat.setOutputPath(job, tempOutputPath);
-            
+
             if (!job.waitForCompletion(true)) {
                 System.exit(1);
             }
@@ -78,6 +79,11 @@ public class PageRankDriver {
 
         Path finalOutputPath = new Path(outputPath, "final");
         FileSystem.get(conf).rename(new Path(tempOutputPath, "normalized-ranks"), finalOutputPath);
+
+        if (fs.exists(finalOutputPath)) {
+            fs.delete(finalOutputPath, true);
+        }
+
     }
 
 }

@@ -21,6 +21,16 @@ import org.apache.hadoop.conf.Configuration;
 
 public class Utils {
 
+    public static ArrayList<String> extractLinks(String text) {
+        ArrayList<String> links = new ArrayList<>();
+        Pattern pattern = Pattern.compile("\\[\\[(.*?)\\]\\]");
+        Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            links.add(matcher.group(1));
+        }
+        return links;
+    }
+
     public static double calculatePageRankDifference(Path prevOutputPath, Path currentOutputPath) throws IOException {
         Configuration conf = new Configuration();
         FileSystem fs = FileSystem.get(conf);
@@ -123,55 +133,14 @@ public class Utils {
                     continue;
                 }
                 PageRankData pageRankData = fromString(tokens[1]);
-                pageRankData.pageRank = pageRankData.pageRank / sumPageRanks;
+                pageRankData.pageRank = pageRankData.pageRank / sumPageRanks;    
+  
                 bw.write(pageRankData.pageTitle + "\t" + pageRankData.toString());
                 bw.newLine();
             }
         }
-    }
-    
-    
-
-    // public static void normalizePageRanks(Path inputPath, Path outputPath) throws IOException {
-    //     Configuration conf = new Configuration();
-    //     FileSystem fs = FileSystem.get(conf);
-    
-    //     Path inputFile = new Path(inputPath, "part-r-00000");
-    
-    //     // Read input data and calculate the sum of all PageRanks
-    //     double sumPageRanks = 0.0;
-    //     try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(inputFile)))) {
-    //         String line;
-    //         while ((line = br.readLine()) != null) {
-    //             String[] tokens = line.split("\t");
-    //             if (tokens.length < 2) {
-    //                 continue;
-    //             }
-    //             PageRankData pageRankData = fromString(tokens[1]);
-    //             sumPageRanks += pageRankData.pageRank;
-    //         }
-    //     }
-    
-    //     // Normalize PageRanks and write them to the output path
-    //     try (BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(inputFile)));
-    //          BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fs.create(new Path(outputPath, "normalized-ranks"))))) {
-    //         String line;
-    //         while ((line = br.readLine()) != null) {
-    //             String[] tokens = line.split("\t");
-    //             if (tokens.length < 2) {
-    //                 continue;
-    //             }
-    //             PageRankData pageRankData = fromString(tokens[1]);
-    //             pageRankData.pageRank = pageRankData.pageRank / sumPageRanks;
-    //             bw.write(pageRankData.pageTitle + "\t" + pageRankData.toString());
-    //             bw.newLine();
-    //         }
-    //     }
-    // }
-    
-    
-    
-    
+    } 
+  
     public static PageRankData fromString(String input) {
         PageRankData pageRankData = new PageRankData();
     
@@ -183,11 +152,7 @@ public class Utils {
             pageRankData.pageRank = Double.parseDouble(matcher.group(2));
     
             String outLinksString = matcher.group(3);
-            if (!outLinksString.isEmpty()) {
-                pageRankData.outLinks = outLinksString.split(", ");
-            } else {
-                pageRankData.outLinks = new String[]{};
-            }
+            pageRankData.outLinks = outLinksString.isEmpty() ? new ArrayList<String>() : new ArrayList<>(Arrays.asList(outLinksString.split(", ")));
         }
     
         return pageRankData;
